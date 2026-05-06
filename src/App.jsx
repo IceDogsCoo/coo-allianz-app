@@ -28,62 +28,178 @@ function isBanned(member) {
   return member.banned_until && new Date(member.banned_until) > new Date();
 }
 
-const styles = {
+function rankFor(member) {
+  const score = (member.count || 0) + (member.golden || 0) * 2;
+  if (score >= 30) return "Commander";
+  if (score >= 15) return "Elite";
+  if (score >= 6) return "Veteran";
+  return "Rookie";
+}
+
+function shieldLevel(member) {
+  const n = member.shield_misses || 0;
+  if (n >= 4) return "Rot";
+  if (n >= 2) return "Gelb";
+  return "Grün";
+}
+
+const s = {
   page: {
     minHeight: "100vh",
-    background: "radial-gradient(circle at top,#163005,#020202 45%,#000)",
+    background:
+      "radial-gradient(circle at top left, rgba(147,192,31,.28), transparent 32%), linear-gradient(135deg,#020402,#071307,#000)",
     color: "#fff",
     padding: 24,
     fontFamily: "Arial, sans-serif",
   },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    gap: 20,
+    padding: 22,
+    borderRadius: 24,
+    border: "1px solid rgba(147,192,31,.65)",
+    background: "rgba(5,10,5,.82)",
+    boxShadow: "0 0 40px rgba(147,192,31,.28)",
+    marginBottom: 22,
+  },
+  logo: {
+    width: 108,
+    height: 108,
+    borderRadius: 22,
+    objectFit: "cover",
+    border: "1px solid #93c01f",
+    boxShadow: "0 0 30px rgba(147,192,31,.75)",
+  },
+  h1: {
+    margin: 0,
+    fontSize: 44,
+    color: "#b8ff3d",
+    letterSpacing: 0.5,
+    textShadow: "0 0 18px rgba(147,192,31,.75)",
+  },
+  muted: { color: "#a7b0a0" },
   card: {
-    background: "rgba(8,8,8,0.94)",
-    border: "1px solid #263b19",
-    borderRadius: 18,
+    background: "rgba(7,10,7,.88)",
+    border: "1px solid rgba(147,192,31,.28)",
+    borderRadius: 22,
     padding: 18,
     marginTop: 16,
-    boxShadow: "0 0 28px rgba(147,192,31,0.14)",
+    boxShadow: "0 0 26px rgba(147,192,31,.12)",
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: 14,
+    marginBottom: 18,
+  },
+  stat: {
+    background: "linear-gradient(180deg,rgba(147,192,31,.16),rgba(0,0,0,.75))",
+    border: "1px solid rgba(147,192,31,.45)",
+    borderRadius: 18,
+    padding: 16,
+    textAlign: "center",
+  },
+  statValue: {
+    fontSize: 30,
+    fontWeight: 900,
+    color: "#b8ff3d",
+    textShadow: "0 0 12px rgba(147,192,31,.7)",
   },
   btn: {
-    background: "#93c01f",
-    color: "#000",
+    background: "linear-gradient(180deg,#caff4a,#93c01f)",
+    color: "#061000",
     border: "none",
-    borderRadius: 10,
-    padding: "10px 14px",
+    borderRadius: 14,
+    padding: "11px 15px",
+    fontWeight: 900,
+    marginRight: 8,
+    marginBottom: 8,
+    cursor: "pointer",
+    boxShadow: "0 0 14px rgba(147,192,31,.35)",
+  },
+  btnDark: {
+    background: "rgba(0,0,0,.55)",
+    color: "#eaffd0",
+    border: "1px solid rgba(147,192,31,.45)",
+    borderRadius: 14,
+    padding: "11px 15px",
     fontWeight: 800,
     marginRight: 8,
     marginBottom: 8,
     cursor: "pointer",
   },
-  btnDark: {
-    background: "#151515",
+  danger: {
+    background: "linear-gradient(180deg,#ff6464,#9f1515)",
     color: "#fff",
-    border: "1px solid #93c01f",
+    border: "none",
+    borderRadius: 12,
+    padding: "8px 10px",
+    fontWeight: 800,
+    marginRight: 5,
+    marginBottom: 5,
+    cursor: "pointer",
+  },
+  small: {
+    background: "#121812",
+    color: "#eaffd0",
+    border: "1px solid rgba(147,192,31,.4)",
     borderRadius: 10,
-    padding: "10px 14px",
-    fontWeight: 700,
-    marginRight: 8,
-    marginBottom: 8,
+    padding: "8px 10px",
+    fontWeight: 800,
+    marginRight: 5,
+    marginBottom: 5,
     cursor: "pointer",
   },
   input: {
-    padding: 11,
-    borderRadius: 10,
-    border: "1px solid #444",
-    background: "#050505",
+    padding: 12,
+    borderRadius: 14,
+    border: "1px solid rgba(147,192,31,.4)",
+    background: "#050705",
     color: "#fff",
     marginRight: 8,
     marginBottom: 8,
+    outline: "none",
+  },
+  tableWrap: { overflowX: "auto", marginTop: 16 },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    background: "rgba(0,0,0,.35)",
+    borderRadius: 16,
+    overflow: "hidden",
   },
   th: {
-    padding: 10,
-    borderBottom: "1px solid #333",
-    color: "#93c01f",
+    padding: 12,
+    borderBottom: "1px solid rgba(147,192,31,.35)",
+    color: "#b8ff3d",
     textAlign: "left",
+    background: "rgba(147,192,31,.08)",
   },
   td: {
-    padding: 10,
-    borderBottom: "1px solid #222",
+    padding: 12,
+    borderBottom: "1px solid rgba(255,255,255,.07)",
+  },
+  hero: {
+    background: "linear-gradient(90deg,rgba(147,192,31,.24),rgba(0,0,0,.65))",
+    border: "2px solid #93c01f",
+    borderRadius: 20,
+    padding: 18,
+    margin: "16px 0",
+    fontSize: 26,
+    fontWeight: 900,
+    color: "#d9ff72",
+    boxShadow: "0 0 24px rgba(147,192,31,.42)",
+  },
+  badge: {
+    display: "inline-block",
+    padding: "5px 9px",
+    borderRadius: 999,
+    border: "1px solid rgba(147,192,31,.45)",
+    color: "#d9ff72",
+    background: "rgba(147,192,31,.12)",
+    fontSize: 12,
+    fontWeight: 900,
   },
 };
 
@@ -146,11 +262,7 @@ export default function App() {
 
     return members.map((m) => {
       if (isBanned(m)) {
-        return {
-          ...m,
-          status: `Gesperrt bis ${formatDate(m.banned_until)}`,
-          nextDate: "-",
-        };
+        return { ...m, status: `Gesperrt bis ${formatDate(m.banned_until)}`, nextDate: "-" };
       }
 
       const d = new Date();
@@ -180,9 +292,16 @@ export default function App() {
     });
   }, [members, shieldReports]);
 
+  const leaderboard = useMemo(() => {
+    return {
+      zug: [...members].sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, 5),
+      golden: [...members].sort((a, b) => (b.golden || 0) - (a.golden || 0)).slice(0, 5),
+      schild: [...members].sort((a, b) => (b.shield_misses || 0) - (a.shield_misses || 0)).slice(0, 5),
+    };
+  }, [members]);
+
   async function normalizePositions() {
     const res = await supabase.from("members").select("*").order("position");
-
     if (res.error) {
       setMessage("Fehler Positionen: " + res.error.message);
       return;
@@ -194,11 +313,7 @@ export default function App() {
     const ordered = [...active, ...banned];
 
     for (let i = 0; i < ordered.length; i++) {
-      const updateRes = await supabase
-        .from("members")
-        .update({ position: i })
-        .eq("id", ordered[i].id);
-
+      const updateRes = await supabase.from("members").update({ position: i }).eq("id", ordered[i].id);
       if (updateRes.error) {
         setMessage("Fehler Position Update: " + updateRes.error.message);
         return;
@@ -417,26 +532,19 @@ export default function App() {
 
   async function deleteVacation(vacation) {
     const res = await supabase.from("vacations").delete().eq("id", vacation.id);
-
     if (res.error) {
       setMessage("Fehler Abwesenheit löschen: " + res.error.message);
       return;
     }
-
     await loadAll();
   }
 
   async function updateVacation(vacation, field, value) {
-    const res = await supabase
-      .from("vacations")
-      .update({ [field]: value })
-      .eq("id", vacation.id);
-
+    const res = await supabase.from("vacations").update({ [field]: value }).eq("id", vacation.id);
     if (res.error) {
       setMessage("Fehler Abwesenheit ändern: " + res.error.message);
       return;
     }
-
     await loadAll();
   }
 
@@ -451,34 +559,30 @@ export default function App() {
   }
 
   return (
-    <div style={styles.page}>
+    <div style={s.page}>
       <Header />
 
-      <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+      <div style={s.grid}>
         <Stat label="Mitglieder" value={members.length} />
+        <Stat label="Heute dran" value={next?.name || "-"} />
         <Stat label="Gesperrt" value={members.filter(isBanned).length} />
         <Stat label="Schild Fehler" value={members.reduce((a, b) => a + (b.shield_misses || 0), 0)} />
       </div>
 
       <div style={{ marginBottom: 16 }}>
-        <button style={view === "member" ? styles.btn : styles.btnDark} onClick={() => setView("member")}>
+        <button style={view === "member" ? s.btn : s.btnDark} onClick={() => setView("member")}>
           Mitgliederansicht
         </button>
-        <button style={view === "admin" ? styles.btn : styles.btnDark} onClick={() => setView("admin")}>
+        <button style={view === "admin" ? s.btn : s.btnDark} onClick={() => setView("admin")}>
           Adminbereich
         </button>
       </div>
 
-      {message && (
-        <div style={{ ...styles.card, borderColor: "#93c01f", color: "#d9ff9b" }}>
-          {message}
-        </div>
-      )}
+      {message && <div style={{ ...s.card, borderColor: "#93c01f", color: "#d9ff9b" }}>{message}</div>}
 
       {view === "member" && (
-        <div style={styles.card}>
+        <div style={s.card}>
           <h2>Mitgliederansicht</h2>
-
           <TabButton active={memberTab === "zug"} onClick={() => setMemberTab("zug")}>Zug</TabButton>
           <TabButton active={memberTab === "schild"} onClick={() => setMemberTab("schild")}>Schild Report</TabButton>
           <TabButton active={memberTab === "ferien"} onClick={() => setMemberTab("ferien")}>Abwesenheit</TabButton>
@@ -488,10 +592,11 @@ export default function App() {
               <h3>Zug Warteliste</h3>
               {next && <Hero text={`Heute dran: ${next.name}`} />}
 
-              <input style={styles.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
-              <button style={styles.btn} onClick={addMember}>Eintragen</button>
+              <input style={s.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
+              <button style={s.btn} onClick={addMember}>Eintragen</button>
 
               <MemberTable members={schedule} />
+              <Leaderboard data={leaderboard} />
             </>
           )}
 
@@ -505,12 +610,10 @@ export default function App() {
           {memberTab === "ferien" && (
             <>
               <h3>Abwesenheit eintragen</h3>
-
-              <input style={styles.input} value={vacName} onChange={(e) => setVacName(e.target.value)} placeholder="Name" />
-              <input style={styles.input} type="date" value={vacFrom} onChange={(e) => setVacFrom(e.target.value)} />
-              <input style={styles.input} type="date" value={vacUntil} onChange={(e) => setVacUntil(e.target.value)} />
-              <button style={styles.btn} onClick={addVacation}>Eintragen</button>
-
+              <input style={s.input} value={vacName} onChange={(e) => setVacName(e.target.value)} placeholder="Name" />
+              <input style={s.input} type="date" value={vacFrom} onChange={(e) => setVacFrom(e.target.value)} />
+              <input style={s.input} type="date" value={vacUntil} onChange={(e) => setVacUntil(e.target.value)} />
+              <button style={s.btn} onClick={addVacation}>Eintragen</button>
               <VacationTable vacations={vacations} />
             </>
           )}
@@ -518,32 +621,30 @@ export default function App() {
       )}
 
       {view === "admin" && !adminLoggedIn && (
-        <div style={styles.card}>
+        <div style={s.card}>
           <h2>Admin Login</h2>
-
-          <input style={styles.input} value={loginUser} onChange={(e) => setLoginUser(e.target.value)} placeholder="Benutzer" />
-          <input style={styles.input} type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Passwort" />
-          <button style={styles.btn} onClick={login}>Login</button>
+          <input style={s.input} value={loginUser} onChange={(e) => setLoginUser(e.target.value)} placeholder="Benutzer" />
+          <input style={s.input} type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Passwort" />
+          <button style={s.btn} onClick={login}>Login</button>
         </div>
       )}
 
       {view === "admin" && adminLoggedIn && (
-        <div style={styles.card}>
+        <div style={s.card}>
           <h2>Adminbereich</h2>
-
           <TabButton active={adminTab === "zug"} onClick={() => setAdminTab("zug")}>Zugführer</TabButton>
           <TabButton active={adminTab === "schild"} onClick={() => setAdminTab("schild")}>Schild Report</TabButton>
           <TabButton active={adminTab === "ferien"} onClick={() => setAdminTab("ferien")}>Abwesenheit</TabButton>
-          <button style={styles.btnDark} onClick={() => setAdminLoggedIn(false)}>Logout</button>
+          <button style={s.btnDark} onClick={() => setAdminLoggedIn(false)}>Logout</button>
 
           {adminTab === "zug" && (
             <>
               <h3>Zugführer</h3>
               {next && <Hero text={`Heute dran: ${next.name}`} />}
 
-              <input style={styles.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
-              <button style={styles.btn} onClick={addMember}>Hinzufügen</button>
-              <button style={styles.btn} onClick={nextTurn}>Täglichen Zug erledigen</button>
+              <input style={s.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
+              <button style={s.btn} onClick={addMember}>Hinzufügen</button>
+              <button style={s.btn} onClick={nextTurn}>Täglichen Zug erledigen</button>
 
               <AdminMemberTable
                 members={schedule}
@@ -554,17 +655,16 @@ export default function App() {
                 onUnban={unbanMember}
                 onDelete={deleteMember}
               />
+              <Leaderboard data={leaderboard} />
             </>
           )}
 
           {adminTab === "schild" && (
             <>
               <h3>Schild Report</h3>
-
-              <input style={styles.input} value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="Spielername" />
-              <input style={styles.input} type="date" value={shieldDate} onChange={(e) => setShieldDate(e.target.value)} />
-              <button style={styles.btn} onClick={() => addShieldMiss()}>Eintragen</button>
-
+              <input style={s.input} value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="Spielername" />
+              <input style={s.input} type="date" value={shieldDate} onChange={(e) => setShieldDate(e.target.value)} />
+              <button style={s.btn} onClick={() => addShieldMiss()}>Eintragen</button>
               <ShieldTable members={shieldList} reports={shieldReports} admin onShield={addShieldMiss} onBan={banMember} />
             </>
           )}
@@ -583,97 +683,75 @@ export default function App() {
 
 function Header() {
   return (
-    <header
-      style={{
-        display: "flex",
-        gap: 20,
-        alignItems: "center",
-        marginBottom: 30,
-        padding: 20,
-        borderRadius: 18,
-        background: "linear-gradient(90deg,#050505,#0d1a07)",
-        border: "1px solid #93c01f",
-        boxShadow: "0 0 30px rgba(147,192,31,0.25)",
-      }}
-    >
-      <img
-        src="/logo.png"
-        alt="COO Logo"
-        style={{
-          width: 95,
-          height: 95,
-          borderRadius: 16,
-          objectFit: "cover",
-          boxShadow: "0 0 25px rgba(147,192,31,0.65)",
-          border: "1px solid #93c01f",
-        }}
-      />
-
+    <header style={s.header}>
+      <img src="/logo.png" alt="COO Logo" style={s.logo} />
       <div>
-        <h1 style={{ color: "#93c01f", margin: 0, fontSize: 42 }}>COO Club Zero</h1>
-        <p style={{ color: "#aaa", marginTop: 6 }}>Zugführer · Schild Report · Abwesenheit</p>
+        <h1 style={s.h1}>COO Club Zero</h1>
+        <p style={s.muted}>Neon Control Center · Zugführer · Schild Report · Abwesenheit</p>
       </div>
     </header>
   );
 }
 
-function Hero({ text }) {
+function Stat({ label, value }) {
   return (
-    <div
-      style={{
-        background: "linear-gradient(90deg,#1a2d0a,#0b1505)",
-        border: "2px solid #93c01f",
-        borderRadius: 16,
-        padding: 18,
-        margin: "16px 0",
-        fontSize: 26,
-        fontWeight: 900,
-        color: "#d4ff5e",
-        boxShadow: "0 0 20px rgba(147,192,31,0.4)",
-      }}
-    >
-      🚆 {text}
+    <div style={s.stat}>
+      <div style={s.statValue}>{value}</div>
+      <div style={s.muted}>{label}</div>
     </div>
   );
 }
 
-function Stat({ label, value }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        minWidth: 160,
-        background: "#0b0b0b",
-        border: "1px solid #93c01f",
-        borderRadius: 14,
-        padding: 14,
-        textAlign: "center",
-        boxShadow: "0 0 18px rgba(147,192,31,0.16)",
-      }}
-    >
-      <div style={{ fontSize: 26, fontWeight: 900, color: "#93c01f" }}>{value}</div>
-      <div style={{ color: "#aaa", fontSize: 14 }}>{label}</div>
-    </div>
-  );
+function Hero({ text }) {
+  return <div style={s.hero}>🚆 {text}</div>;
 }
 
 function TabButton({ active, onClick, children }) {
   return (
-    <button style={active ? styles.btn : styles.btnDark} onClick={onClick}>
+    <button style={active ? s.btn : s.btnDark} onClick={onClick}>
       {children}
     </button>
   );
 }
 
+function Leaderboard({ data }) {
+  return (
+    <div style={s.grid}>
+      <Board title="Top Züge" list={data.zug} field="count" />
+      <Board title="Top Golden" list={data.golden} field="golden" />
+      <Board title="Schild Fails" list={data.schild} field="shield_misses" />
+    </div>
+  );
+}
+
+function Board({ title, list, field }) {
+  return (
+    <div style={s.card}>
+      <h3>{title}</h3>
+      {list.length === 0 ? (
+        <p style={s.muted}>Noch keine Daten</p>
+      ) : (
+        list.map((m, i) => (
+          <div key={m.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+            <span>{i + 1}. {m.name}</span>
+            <b style={{ color: "#b8ff3d" }}>{m[field] || 0}</b>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 function MemberTable({ members }) {
   return (
-    <Table headers={["Position", "Name", "Termin", "Status"]}>
+    <Table headers={["Position", "Name", "Rang", "Termin", "Status"]}>
       {members.map((m, i) => (
         <tr key={m.id}>
-          <td style={styles.td}>{i + 1}</td>
-          <td style={styles.td}>{m.name}</td>
-          <td style={styles.td}>{m.nextDate}</td>
-          <td style={styles.td}>{m.status}</td>
+          <td style={s.td}>{i + 1}</td>
+          <td style={s.td}><b>{m.name}</b></td>
+          <td style={s.td}><span style={s.badge}>{rankFor(m)}</span></td>
+          <td style={s.td}>{m.nextDate}</td>
+          <td style={s.td}>{m.status}</td>
         </tr>
       ))}
     </Table>
@@ -682,24 +760,25 @@ function MemberTable({ members }) {
 
 function AdminMemberTable({ members, onMove, onGolden, onShield, onBan, onUnban, onDelete }) {
   return (
-    <Table headers={["Pos", "Name", "Termin", "Status", "Züge", "Golden", "Schild", "Aktionen"]}>
+    <Table headers={["Pos", "Name", "Rang", "Termin", "Status", "Züge", "Golden", "Schild", "Aktionen"]}>
       {members.map((m, i) => (
         <tr key={m.id}>
-          <td style={styles.td}>{i + 1}</td>
-          <td style={styles.td}>{m.name}</td>
-          <td style={styles.td}>{m.nextDate}</td>
-          <td style={styles.td}>{m.status}</td>
-          <td style={styles.td}>{m.count || 0}</td>
-          <td style={styles.td}>{m.golden || 0}</td>
-          <td style={styles.td}>{m.shield_misses || 0}</td>
-          <td style={styles.td}>
-            <button onClick={() => onMove(m, -1)}>↑</button>
-            <button onClick={() => onMove(m, 1)}>↓</button>
-            <button onClick={() => onGolden(m)}>Golden</button>
-            <button onClick={() => onShield(m.name)}>Schild</button>
-            <button onClick={() => onBan(m, "Zug nicht erledigt")}>60d</button>
-            {isBanned(m) && <button onClick={() => onUnban(m)}>Entsperren</button>}
-            <button onClick={() => onDelete(m)}>Löschen</button>
+          <td style={s.td}>{i + 1}</td>
+          <td style={s.td}><b>{m.name}</b></td>
+          <td style={s.td}><span style={s.badge}>{rankFor(m)}</span></td>
+          <td style={s.td}>{m.nextDate}</td>
+          <td style={s.td}>{m.status}</td>
+          <td style={s.td}>{m.count || 0}</td>
+          <td style={s.td}>{m.golden || 0}</td>
+          <td style={s.td}>{m.shield_misses || 0}</td>
+          <td style={s.td}>
+            <button style={s.small} onClick={() => onMove(m, -1)}>↑</button>
+            <button style={s.small} onClick={() => onMove(m, 1)}>↓</button>
+            <button style={s.small} onClick={() => onGolden(m)}>Golden</button>
+            <button style={s.small} onClick={() => onShield(m.name)}>Schild</button>
+            <button style={s.danger} onClick={() => onBan(m, "Zug nicht erledigt")}>60d</button>
+            {isBanned(m) && <button style={s.small} onClick={() => onUnban(m)}>Entsperren</button>}
+            <button style={s.danger} onClick={() => onDelete(m)}>Löschen</button>
           </td>
         </tr>
       ))}
@@ -709,20 +788,22 @@ function AdminMemberTable({ members, onMove, onGolden, onShield, onBan, onUnban,
 
 function ShieldTable({ members, reports, admin, onShield, onBan }) {
   return (
-    <Table headers={admin ? ["Name", "Anzahl", "Letztes Datum", "Alle Meldungen", "Aktionen"] : ["Name", "Anzahl", "Letztes Datum", "Alle Meldungen"]}>
+    <Table headers={admin ? ["Name", "Warnung", "Anzahl", "Letztes Datum", "Alle Meldungen", "Aktionen"] : ["Name", "Warnung", "Anzahl", "Letztes Datum", "Alle Meldungen"]}>
       {members.map((m) => {
         const memberReports = reports.filter((r) => r.member_name === m.name);
+        const level = shieldLevel(m);
 
         return (
           <tr key={m.id}>
-            <td style={styles.td}>{m.name}</td>
-            <td style={styles.td}>{m.shield_misses || 0}</td>
-            <td style={styles.td}>{memberReports[0] ? formatDate(memberReports[0].date) : "-"}</td>
-            <td style={styles.td}>{memberReports.map((r) => formatDate(r.date)).join(", ") || "-"}</td>
+            <td style={s.td}><b>{m.name}</b></td>
+            <td style={s.td}><span style={{ ...s.badge, color: level === "Rot" ? "#ff7777" : level === "Gelb" ? "#ffe066" : "#b8ff3d" }}>{level}</span></td>
+            <td style={s.td}>{m.shield_misses || 0}</td>
+            <td style={s.td}>{memberReports[0] ? formatDate(memberReports[0].date) : "-"}</td>
+            <td style={s.td}>{memberReports.map((r) => formatDate(r.date)).join(", ") || "-"}</td>
             {admin && (
-              <td style={styles.td}>
-                <button onClick={() => onShield(m.name)}>+1</button>
-                <button onClick={() => onBan(m, "Schild nicht gesetzt")}>60d Sperre</button>
+              <td style={s.td}>
+                <button style={s.small} onClick={() => onShield(m.name)}>+1</button>
+                <button style={s.danger} onClick={() => onBan(m, "Schild nicht gesetzt")}>60d Sperre</button>
               </td>
             )}
           </tr>
@@ -737,16 +818,16 @@ function VacationTable({ vacations, admin, onDelete, onUpdate }) {
     <Table headers={admin ? ["Name", "Von", "Bis", "Aktionen"] : ["Name", "Von", "Bis"]}>
       {vacations.map((v) => (
         <tr key={v.id}>
-          <td style={styles.td}>{v.name}</td>
-          <td style={styles.td}>
-            {admin ? <input type="date" value={v.from_date} onChange={(e) => onUpdate(v, "from_date", e.target.value)} /> : formatDate(v.from_date)}
+          <td style={s.td}><b>{v.name}</b></td>
+          <td style={s.td}>
+            {admin ? <input style={s.input} type="date" value={v.from_date} onChange={(e) => onUpdate(v, "from_date", e.target.value)} /> : formatDate(v.from_date)}
           </td>
-          <td style={styles.td}>
-            {admin ? <input type="date" value={v.until_date} onChange={(e) => onUpdate(v, "until_date", e.target.value)} /> : formatDate(v.until_date)}
+          <td style={s.td}>
+            {admin ? <input style={s.input} type="date" value={v.until_date} onChange={(e) => onUpdate(v, "until_date", e.target.value)} /> : formatDate(v.until_date)}
           </td>
           {admin && (
-            <td style={styles.td}>
-              <button onClick={() => onDelete(v)}>Löschen</button>
+            <td style={s.td}>
+              <button style={s.danger} onClick={() => onDelete(v)}>Löschen</button>
             </td>
           )}
         </tr>
@@ -757,22 +838,12 @@ function VacationTable({ vacations, admin, onDelete, onUpdate }) {
 
 function Table({ headers, children }) {
   return (
-    <div style={{ overflowX: "auto", marginTop: 16 }}>
-      <table
-        style={{
-          width: "100%",
-          borderCollapse: "collapse",
-          background: "#050505",
-          borderRadius: 12,
-          overflow: "hidden",
-        }}
-      >
-        <thead style={{ background: "#111" }}>
+    <div style={s.tableWrap}>
+      <table style={s.table}>
+        <thead>
           <tr>
             {headers.map((h) => (
-              <th key={h} style={{ ...styles.th, fontSize: 14 }}>
-                {h}
-              </th>
+              <th key={h} style={s.th}>{h}</th>
             ))}
           </tr>
         </thead>
