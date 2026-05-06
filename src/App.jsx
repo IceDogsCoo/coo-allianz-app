@@ -35,6 +35,14 @@ function isBanned(member) {
 
 function isAbsent(member, vacations, dateValue = today()) {
   return vacations.some((v) => {
+    if (v.member_id) {
+      return (
+        v.member_id === member.id &&
+        v.from_date <= dateValue &&
+        v.until_date >= dateValue
+      );
+    }
+
     return (
       v.name?.toLowerCase() === member.name?.toLowerCase() &&
       v.from_date <= dateValue &&
@@ -232,7 +240,7 @@ export default function App() {
   const [shieldName, setShieldName] = useState("");
   const [shieldDate, setShieldDate] = useState(today());
 
-  const [vacName, setVacName] = useState("");
+  const [vacMemberId, setVacMemberId] = useState("");
   const [vacFrom, setVacFrom] = useState(today());
   const [vacUntil, setVacUntil] = useState("");
 
@@ -581,14 +589,22 @@ export default function App() {
   }
 
   async function addVacation() {
-    if (!vacName.trim() || !vacFrom || !vacUntil) {
-      setMessage("Bitte Name, von und bis eintragen.");
+    if (!vacMemberId || !vacFrom || !vacUntil) {
+      setMessage("Bitte Mitglied, von und bis auswählen.");
+      return;
+    }
+
+    const member = members.find((m) => m.id === vacMemberId);
+
+    if (!member) {
+      setMessage("Mitglied nicht gefunden.");
       return;
     }
 
     const res = await supabase.from("vacations").insert([
       {
-        name: vacName.trim(),
+        name: member.name,
+        member_id: member.id,
         from_date: vacFrom,
         until_date: vacUntil,
       },
@@ -599,7 +615,7 @@ export default function App() {
       return;
     }
 
-    setVacName("");
+    setVacMemberId("");
     setVacFrom(today());
     setVacUntil("");
     await loadAll();
@@ -615,7 +631,14 @@ export default function App() {
   }
 
   async function updateVacation(vacation, field, value) {
-    const res = await supabase.from("vacations").update({ [field]: value }).eq("id", vacation.id);
+    const updateData = { [field]: value };
+
+    if (field === "member_id") {
+      const member = members.find((m) => m.id === value);
+      updateData.name = member?.name || vacation.name;
+    }
+
+    const res = await supabase.from("vacations").update(updateData).eq("id", vacation.id);
     if (res.error) {
       setMessage("Fehler Abwesenheit ändern: " + res.error.message);
       return;
@@ -682,7 +705,7 @@ export default function App() {
               <input className="coo-input" style={s.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
               <button style={s.btn} onClick={addMember}>Eintragen</button>
 
-              <MemberTable members={schedule} vacations={vacations} />
+              <MemberTable members={schedule} />
               <Leaderboard data={leaderboard} />
             </>
           )}
@@ -697,11 +720,11 @@ export default function App() {
           {memberTab === "ferien" && (
             <>
               <h3>Abwesenheit eintragen</h3>
-              <input className="coo-input" style={s.input} value={vacName} onChange={(e) => setVacName(e.target.value)} placeholder="Name" />
+              <MemberSelect members={members} value={vacMemberId} onChange={setVacMemberId} />
               <input className="coo-input" style={s.input} type="date" value={vacFrom} onChange={(e) => setVacFrom(e.target.value)} />
               <input className="coo-input" style={s.input} type="date" value={vacUntil} onChange={(e) => setVacUntil(e.target.value)} />
               <button style={s.btn} onClick={addVacation}>Eintragen</button>
-              <VacationTable vacations={vacations} />
+              <VacationTable vacations={vacations} members={members} />
             </>
           )}
         </div>
@@ -736,7 +759,6 @@ export default function App() {
 
               <AdminMemberTable
                 members={schedule}
-                vacations={vacations}
                 onMove={moveMember}
                 onGolden={markGolden}
                 onShield={addShieldMiss}
@@ -764,7 +786,7 @@ export default function App() {
           {adminTab === "ferien" && (
             <>
               <h3>Abwesenheit bearbeiten</h3>
-              <VacationTable vacations={vacations} admin onDelete={deleteVacation} onUpdate={updateVacation} />
+              <VacationTable vacations={vacations} members={members} admin onDelete={deleteVacation} onUpdate={updateVacation} />
             </>
           )}
         </div>
@@ -806,6 +828,24 @@ function TabButton({ active, onClick, children }) {
   );
 }
 
+function MemberSelect({ members, value, onChange }) {
+  return (
+    <select
+      className="coo-input"
+      style={s.input}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">Mitglied auswählen</option>
+      {members.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function Leaderboard({ data }) {
   return (
     <div style={s.grid}>
@@ -834,7 +874,7 @@ function Board({ title, list, field }) {
   );
 }
 
-function MemberTable({ members, vacations }) {
+function MemberTable({ members }) {
   return (
     <Table headers={["Position", "Name", "Rang", "Termin", "Status"]}>
       {members.map((m, i) => (
@@ -916,12 +956,22 @@ function ShieldTable({ members, reports, admin, onShield, onBan }) {
   );
 }
 
-function VacationTable({ vacations, admin, onDelete, onUpdate }) {
+function VacationTable({ vacations, members, admin, onDelete, onUpdate }) {
   return (
-    <Table headers={admin ? ["Name", "Von", "Bis", "Aktionen"] : ["Name", "Von", "Bis"]}>
+    <Table headers={admin ? ["Mitglied", "Von", "Bis", "Aktionen"] : ["Mitglied", "Von", "Bis"]}>
       {vacations.map((v) => (
         <tr key={v.id}>
-          <td style={s.td}><b>{v.name}</b></td>
+          <td style={s.td}>
+            {admin ? (
+              <MemberSelect
+                members={members}
+                value={v.member_id || ""}
+                onChange={(value) => onUpdate(v, "member_id", value)}
+              />
+            ) : (
+              <b>{v.name}</b>
+            )}
+          </td>
           <td style={s.td}>
             {admin ? <input style={s.input} type="date" value={v.from_date} onChange={(e) => onUpdate(v, "from_date", e.target.value)} /> : formatDate(v.from_date)}
           </td>
