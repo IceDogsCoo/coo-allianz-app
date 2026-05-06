@@ -13,6 +13,11 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function nowAfterRotationTime() {
+  const d = new Date();
+  return d.getHours() > 0 || (d.getHours() === 0 && d.getMinutes() >= 1);
+}
+
 function formatDate(value) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString("de-CH");
@@ -26,6 +31,16 @@ function addDays(days) {
 
 function isBanned(member) {
   return member.banned_until && new Date(member.banned_until) > new Date();
+}
+
+function isAbsent(member, vacations, dateValue = today()) {
+  return vacations.some((v) => {
+    return (
+      v.name?.toLowerCase() === member.name?.toLowerCase() &&
+      v.from_date <= dateValue &&
+      v.until_date >= dateValue
+    );
+  });
 }
 
 function rankFor(member) {
@@ -75,7 +90,6 @@ const s = {
     margin: 0,
     fontSize: 44,
     color: "#b8ff3d",
-    letterSpacing: 0.5,
     textShadow: "0 0 18px rgba(147,192,31,.75)",
   },
   muted: { color: "#a7b0a0" },
@@ -104,7 +118,6 @@ const s = {
     fontSize: 30,
     fontWeight: 900,
     color: "#b8ff3d",
-    textShadow: "0 0 12px rgba(147,192,31,.7)",
   },
   btn: {
     background: "linear-gradient(180deg,#caff4a,#93c01f)",
@@ -116,7 +129,6 @@ const s = {
     marginRight: 8,
     marginBottom: 8,
     cursor: "pointer",
-    boxShadow: "0 0 14px rgba(147,192,31,.35)",
   },
   btnDark: {
     background: "rgba(0,0,0,.55)",
@@ -225,24 +237,15 @@ export default function App() {
   const [vacUntil, setVacUntil] = useState("");
 
   const [message, setMessage] = useState("");
+  const [autoChecked, setAutoChecked] = useState(false);
+  const [dragId, setDragId] = useState(null);
 
   async function loadAll() {
     setMessage("");
 
-    const membersRes = await supabase
-      .from("members")
-      .select("*")
-      .order("position", { ascending: true });
-
-    const shieldRes = await supabase
-      .from("shield_reports")
-      .select("*")
-      .order("date", { ascending: false });
-
-    const vacationRes = await supabase
-      .from("vacations")
-      .select("*")
-      .order("from_date", { ascending: true });
+    const membersRes = await supabase.from("members").select("*").order("position", { ascending: true });
+    const shieldRes = await supabase.from("shield_reports").select("*").order("date", { ascending: false });
+    const vacationRes = await supabase.from("vacations").select("*").order("from_date", { ascending: true });
 
     if (membersRes.error) setMessage("Fehler members: " + membersRes.error.message);
     if (shieldRes.error) setMessage("Fehler shield_reports: " + shieldRes.error.message);
@@ -257,12 +260,64 @@ export default function App() {
     loadAll();
   }, []);
 
+  useEffect(() => {
+    if (!autoChecked && members.length > 0) {
+      setAutoChecked(true);
+      checkAutoRotation();
+    }
+  }, [members, vacations, autoChecked]);
+
+  async function getSetting(key) {
+    const res = await supabase.from("app_settings").select("value").eq("key", key).maybeSingle();
+    if (res.error) {
+      setMessage("Fehler app_settings: " + res.error.message);
+      return null;
+    }
+    return res.data?.value || null;
+  }
+
+  async function setSetting(key, value) {
+    const res = await supabase.from("app_settings").upsert([{ key, value }]);
+    if (res.error) setMessage("Fehler app_settings speichern: " + res.error.message);
+  }
+
+  async function checkAutoRotation() {
+    if (!nowAfterRotationTime()) return;
+
+    const currentDate = today();
+    const lastRotation = await getSetting("last_rotation_date");
+
+    if (lastRotation === currentDate) return;
+
+    await nextTurn(true);
+    await setSetting("last_rotation_date", currentDate);
+    await loadAll();
+    setMessage("Automatische Tagesrotation wurde ausgeführt.");
+  }
+
   const schedule = useMemo(() => {
     let dayOffset = 0;
 
     return members.map((m) => {
-      if (isBanned(m)) {
-        return { ...m, status: `Gesperrt bis ${formatDate(m.banned_until)}`, nextDate: "-" };
+      const absent = isAbsent(m, vacations);
+      const banned = isBanned(m);
+
+      if (banned) {
+        return {
+          ...m,
+          absent,
+          status: `Gesperrt bis ${formatDate(m.banned_until)}`,
+          nextDate: "-",
+        };
+      }
+
+      if (absent) {
+        return {
+          ...m,
+          absent,
+          status: "Abwesend / wird übersprungen",
+          nextDate: "-",
+        };
       }
 
       const d = new Date();
@@ -270,6 +325,7 @@ export default function App() {
 
       const item = {
         ...m,
+        absent,
         status: dayOffset === 0 ? "Heute dran" : `In ${dayOffset} Tag(en)`,
         nextDate: formatDate(d),
       };
@@ -277,9 +333,9 @@ export default function App() {
       dayOffset += 1;
       return item;
     });
-  }, [members]);
+  }, [members, vacations]);
 
-  const next = schedule.find((m) => !isBanned(m));
+  const next = schedule.find((m) => !isBanned(m) && !m.absent);
 
   const shieldList = useMemo(() => {
     return [...members].sort((a, b) => {
@@ -302,6 +358,7 @@ export default function App() {
 
   async function normalizePositions() {
     const res = await supabase.from("members").select("*").order("position");
+
     if (res.error) {
       setMessage("Fehler Positionen: " + res.error.message);
       return;
@@ -359,11 +416,14 @@ export default function App() {
     setMessage("Spieler eingetragen.");
   }
 
-  async function nextTurn() {
-    const active = members.filter((m) => !isBanned(m));
-    if (!active.length) return;
+  async function nextTurn(isAuto = false) {
+    const available = members.filter((m) => !isBanned(m) && !isAbsent(m, vacations));
+    if (!available.length) {
+      if (!isAuto) setMessage("Kein verfügbarer Spieler vorhanden.");
+      return;
+    }
 
-    const first = active[0];
+    const first = available[0];
 
     const res = await supabase
       .from("members")
@@ -380,14 +440,12 @@ export default function App() {
 
     await normalizePositions();
     await loadAll();
+
+    if (!isAuto) setMessage(`${first.name} wurde abgeschlossen und nach unten verschoben.`);
   }
 
   async function markGolden(member) {
-    const res = await supabase
-      .from("members")
-      .update({ golden: (member.golden || 0) + 1 })
-      .eq("id", member.id);
-
+    const res = await supabase.from("members").update({ golden: (member.golden || 0) + 1 }).eq("id", member.id);
     if (res.error) setMessage("Fehler Golden: " + res.error.message);
     await loadAll();
   }
@@ -408,10 +466,7 @@ export default function App() {
   }
 
   async function unbanMember(member) {
-    const res = await supabase
-      .from("members")
-      .update({ banned_until: null, ban_reason: "" })
-      .eq("id", member.id);
+    const res = await supabase.from("members").update({ banned_until: null, ban_reason: "" }).eq("id", member.id);
 
     if (res.error) {
       setMessage("Fehler Entsperren: " + res.error.message);
@@ -445,6 +500,26 @@ export default function App() {
     await supabase.from("members").update({ position: other.position }).eq("id", member.id);
     await supabase.from("members").update({ position: member.position }).eq("id", other.id);
 
+    await loadAll();
+  }
+
+  async function reorderMembers(draggedId, targetId) {
+    if (!draggedId || !targetId || draggedId === targetId) return;
+
+    const list = [...members];
+    const fromIndex = list.findIndex((m) => m.id === draggedId);
+    const toIndex = list.findIndex((m) => m.id === targetId);
+
+    if (fromIndex < 0 || toIndex < 0) return;
+
+    const [dragged] = list.splice(fromIndex, 1);
+    list.splice(toIndex, 0, dragged);
+
+    for (let i = 0; i < list.length; i++) {
+      await supabase.from("members").update({ position: i }).eq("id", list[i].id);
+    }
+
+    setDragId(null);
     await loadAll();
   }
 
@@ -560,12 +635,24 @@ export default function App() {
 
   return (
     <div style={s.page}>
+      <style>{`
+        @media (max-width: 700px) {
+          body { margin: 0; }
+          .coo-header { flex-direction: column; align-items: flex-start !important; }
+          .coo-title { font-size: 32px !important; }
+          .coo-input { width: 100%; box-sizing: border-box; }
+          .coo-actions button { width: 100%; margin-right: 0 !important; }
+          .desktop-only-note { display: none; }
+        }
+      `}</style>
+
       <Header />
 
       <div style={s.grid}>
         <Stat label="Mitglieder" value={members.length} />
         <Stat label="Heute dran" value={next?.name || "-"} />
         <Stat label="Gesperrt" value={members.filter(isBanned).length} />
+        <Stat label="Abwesend" value={members.filter((m) => isAbsent(m, vacations)).length} />
         <Stat label="Schild Fehler" value={members.reduce((a, b) => a + (b.shield_misses || 0), 0)} />
       </div>
 
@@ -592,10 +679,10 @@ export default function App() {
               <h3>Zug Warteliste</h3>
               {next && <Hero text={`Heute dran: ${next.name}`} />}
 
-              <input style={s.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
+              <input className="coo-input" style={s.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
               <button style={s.btn} onClick={addMember}>Eintragen</button>
 
-              <MemberTable members={schedule} />
+              <MemberTable members={schedule} vacations={vacations} />
               <Leaderboard data={leaderboard} />
             </>
           )}
@@ -610,9 +697,9 @@ export default function App() {
           {memberTab === "ferien" && (
             <>
               <h3>Abwesenheit eintragen</h3>
-              <input style={s.input} value={vacName} onChange={(e) => setVacName(e.target.value)} placeholder="Name" />
-              <input style={s.input} type="date" value={vacFrom} onChange={(e) => setVacFrom(e.target.value)} />
-              <input style={s.input} type="date" value={vacUntil} onChange={(e) => setVacUntil(e.target.value)} />
+              <input className="coo-input" style={s.input} value={vacName} onChange={(e) => setVacName(e.target.value)} placeholder="Name" />
+              <input className="coo-input" style={s.input} type="date" value={vacFrom} onChange={(e) => setVacFrom(e.target.value)} />
+              <input className="coo-input" style={s.input} type="date" value={vacUntil} onChange={(e) => setVacUntil(e.target.value)} />
               <button style={s.btn} onClick={addVacation}>Eintragen</button>
               <VacationTable vacations={vacations} />
             </>
@@ -623,8 +710,8 @@ export default function App() {
       {view === "admin" && !adminLoggedIn && (
         <div style={s.card}>
           <h2>Admin Login</h2>
-          <input style={s.input} value={loginUser} onChange={(e) => setLoginUser(e.target.value)} placeholder="Benutzer" />
-          <input style={s.input} type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Passwort" />
+          <input className="coo-input" style={s.input} value={loginUser} onChange={(e) => setLoginUser(e.target.value)} placeholder="Benutzer" />
+          <input className="coo-input" style={s.input} type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Passwort" />
           <button style={s.btn} onClick={login}>Login</button>
         </div>
       )}
@@ -640,20 +727,25 @@ export default function App() {
           {adminTab === "zug" && (
             <>
               <h3>Zugführer</h3>
+              <p className="desktop-only-note" style={s.muted}>Drag & Drop: Zeile ziehen und auf gewünschte Position fallen lassen.</p>
               {next && <Hero text={`Heute dran: ${next.name}`} />}
 
-              <input style={s.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
+              <input className="coo-input" style={s.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
               <button style={s.btn} onClick={addMember}>Hinzufügen</button>
-              <button style={s.btn} onClick={nextTurn}>Täglichen Zug erledigen</button>
+              <button style={s.btn} onClick={() => nextTurn(false)}>Täglichen Zug erledigen</button>
 
               <AdminMemberTable
                 members={schedule}
+                vacations={vacations}
                 onMove={moveMember}
                 onGolden={markGolden}
                 onShield={addShieldMiss}
                 onBan={banMember}
                 onUnban={unbanMember}
                 onDelete={deleteMember}
+                dragId={dragId}
+                setDragId={setDragId}
+                reorderMembers={reorderMembers}
               />
               <Leaderboard data={leaderboard} />
             </>
@@ -662,8 +754,8 @@ export default function App() {
           {adminTab === "schild" && (
             <>
               <h3>Schild Report</h3>
-              <input style={s.input} value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="Spielername" />
-              <input style={s.input} type="date" value={shieldDate} onChange={(e) => setShieldDate(e.target.value)} />
+              <input className="coo-input" style={s.input} value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="Spielername" />
+              <input className="coo-input" style={s.input} type="date" value={shieldDate} onChange={(e) => setShieldDate(e.target.value)} />
               <button style={s.btn} onClick={() => addShieldMiss()}>Eintragen</button>
               <ShieldTable members={shieldList} reports={shieldReports} admin onShield={addShieldMiss} onBan={banMember} />
             </>
@@ -683,10 +775,10 @@ export default function App() {
 
 function Header() {
   return (
-    <header style={s.header}>
+    <header className="coo-header" style={s.header}>
       <img src="/logo.png" alt="COO Logo" style={s.logo} />
       <div>
-        <h1 style={s.h1}>COO Club Zero</h1>
+        <h1 className="coo-title" style={s.h1}>COO Club Zero</h1>
         <p style={s.muted}>Neon Control Center · Zugführer · Schild Report · Abwesenheit</p>
       </div>
     </header>
@@ -742,11 +834,11 @@ function Board({ title, list, field }) {
   );
 }
 
-function MemberTable({ members }) {
+function MemberTable({ members, vacations }) {
   return (
     <Table headers={["Position", "Name", "Rang", "Termin", "Status"]}>
       {members.map((m, i) => (
-        <tr key={m.id}>
+        <tr key={m.id} style={{ opacity: m.absent || isBanned(m) ? 0.55 : 1 }}>
           <td style={s.td}>{i + 1}</td>
           <td style={s.td}><b>{m.name}</b></td>
           <td style={s.td}><span style={s.badge}>{rankFor(m)}</span></td>
@@ -758,11 +850,22 @@ function MemberTable({ members }) {
   );
 }
 
-function AdminMemberTable({ members, onMove, onGolden, onShield, onBan, onUnban, onDelete }) {
+function AdminMemberTable({ members, onMove, onGolden, onShield, onBan, onUnban, onDelete, dragId, setDragId, reorderMembers }) {
   return (
     <Table headers={["Pos", "Name", "Rang", "Termin", "Status", "Züge", "Golden", "Schild", "Aktionen"]}>
       {members.map((m, i) => (
-        <tr key={m.id}>
+        <tr
+          key={m.id}
+          draggable
+          onDragStart={() => setDragId(m.id)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => reorderMembers(dragId, m.id)}
+          style={{
+            opacity: m.absent || isBanned(m) ? 0.55 : 1,
+            cursor: "grab",
+            outline: dragId === m.id ? "2px solid #b8ff3d" : "none",
+          }}
+        >
           <td style={s.td}>{i + 1}</td>
           <td style={s.td}><b>{m.name}</b></td>
           <td style={s.td}><span style={s.badge}>{rankFor(m)}</span></td>
