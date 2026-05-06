@@ -656,7 +656,44 @@ export default function App() {
   );
 }
 
-function Header() {
+function function Header() {
+  return (
+    <header
+      style={{
+        display: "flex",
+        gap: 20,
+        alignItems: "center",
+        marginBottom: 30,
+        padding: 20,
+        borderRadius: 18,
+        background: "linear-gradient(90deg,#050505,#0d1a07)",
+        border: "1px solid #93c01f",
+        boxShadow: "0 0 30px rgba(147,192,31,0.25)",
+      }}
+    >
+      <img
+        src="/logo.png"
+        alt="COO Logo"
+        style={{
+          width: 90,
+          height: 90,
+          borderRadius: 16,
+          objectFit: "cover",
+          boxShadow: "0 0 25px rgba(147,192,31,0.6)",
+        }}
+      />
+
+      <div>
+        <h1 style={{ color: "#93c01f", margin: 0, fontSize: 42 }}>
+          COO Club Zero
+        </h1>
+        <p style={{ color: "#aaa", marginTop: 6 }}>
+          Zugführer · Schild Report · Abwesenheit
+        </p>
+      </div>
+    </header>
+  );
+}() {
   return (
     <header style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 24 }}>
       <div
