@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-const ADMIN_USER = "CooAdmin";
-const ADMIN_PASS = "Server2245Coo";
-
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
+
+const ADMIN_USER = "CooAdmin";
+const ADMIN_PASS = "Server2245Coo";
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -27,6 +27,65 @@ function addDays(days) {
 function isBanned(member) {
   return member.banned_until && new Date(member.banned_until) > new Date();
 }
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    background: "linear-gradient(135deg,#020202,#071306,#000)",
+    color: "#fff",
+    padding: 24,
+    fontFamily: "Arial, sans-serif",
+  },
+  card: {
+    background: "#0d0d0d",
+    border: "1px solid #23351a",
+    borderRadius: 18,
+    padding: 18,
+    marginTop: 16,
+    boxShadow: "0 0 22px rgba(147,192,31,0.12)",
+  },
+  btn: {
+    background: "#93c01f",
+    color: "#000",
+    border: "none",
+    borderRadius: 10,
+    padding: "10px 14px",
+    fontWeight: 800,
+    marginRight: 8,
+    marginBottom: 8,
+    cursor: "pointer",
+  },
+  btnDark: {
+    background: "#1b1b1b",
+    color: "#fff",
+    border: "1px solid #93c01f",
+    borderRadius: 10,
+    padding: "10px 14px",
+    fontWeight: 700,
+    marginRight: 8,
+    marginBottom: 8,
+    cursor: "pointer",
+  },
+  input: {
+    padding: 11,
+    borderRadius: 10,
+    border: "1px solid #444",
+    background: "#050505",
+    color: "#fff",
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  th: {
+    padding: 10,
+    borderBottom: "1px solid #333",
+    color: "#93c01f",
+    textAlign: "left",
+  },
+  td: {
+    padding: 10,
+    borderBottom: "1px solid #222",
+  },
+};
 
 export default function App() {
   const [view, setView] = useState("member");
@@ -49,10 +108,29 @@ export default function App() {
   const [vacFrom, setVacFrom] = useState(today());
   const [vacUntil, setVacUntil] = useState("");
 
+  const [message, setMessage] = useState("");
+
   async function loadAll() {
-    const membersRes = await supabase.from("members").select("*").order("position");
-    const shieldRes = await supabase.from("shield_reports").select("*").order("date", { ascending: false });
-    const vacationRes = await supabase.from("vacations").select("*").order("from_date");
+    setMessage("");
+
+    const membersRes = await supabase
+      .from("members")
+      .select("*")
+      .order("position", { ascending: true });
+
+    const shieldRes = await supabase
+      .from("shield_reports")
+      .select("*")
+      .order("date", { ascending: false });
+
+    const vacationRes = await supabase
+      .from("vacations")
+      .select("*")
+      .order("from_date", { ascending: true });
+
+    if (membersRes.error) setMessage("Fehler members: " + membersRes.error.message);
+    if (shieldRes.error) setMessage("Fehler shield_reports: " + shieldRes.error.message);
+    if (vacationRes.error) setMessage("Fehler vacations: " + vacationRes.error.message);
 
     setMembers(membersRes.data || []);
     setShieldReports(shieldRes.data || []);
@@ -65,23 +143,36 @@ export default function App() {
 
   const schedule = useMemo(() => {
     let dayOffset = 0;
+
     return members.map((m) => {
       if (isBanned(m)) {
-        return { ...m, status: `Gesperrt bis ${formatDate(m.banned_until)}`, nextDate: "-" };
+        return {
+          ...m,
+          status: `Gesperrt bis ${formatDate(m.banned_until)}`,
+          nextDate: "-",
+        };
       }
+
       const d = new Date();
       d.setDate(d.getDate() + dayOffset);
-      const status = dayOffset === 0 ? "Heute dran" : `In ${dayOffset} Tag(en)`;
-      dayOffset++;
-      return { ...m, status, nextDate: formatDate(d) };
+
+      const item = {
+        ...m,
+        status: dayOffset === 0 ? "Heute dran" : `In ${dayOffset} Tag(en)`,
+        nextDate: formatDate(d),
+      };
+
+      dayOffset += 1;
+      return item;
     });
   }, [members]);
 
+  const next = schedule.find((m) => !isBanned(m));
+
   const shieldList = useMemo(() => {
     return [...members].sort((a, b) => {
-      if ((b.shield_misses || 0) !== (a.shield_misses || 0)) {
-        return (b.shield_misses || 0) - (a.shield_misses || 0);
-      }
+      const diff = (b.shield_misses || 0) - (a.shield_misses || 0);
+      if (diff !== 0) return diff;
 
       const lastA = shieldReports.find((r) => r.member_name === a.name)?.date || "";
       const lastB = shieldReports.find((r) => r.member_name === b.name)?.date || "";
@@ -89,29 +180,14 @@ export default function App() {
     });
   }, [members, shieldReports]);
 
-  async function addMember() {
-    const name = newMember.trim();
-    if (!name) return;
-
-    const active = members.filter((m) => !isBanned(m));
-    const position = active.length;
-
-    await supabase.from("members").insert({
-      name,
-      position,
-      count: 0,
-      golden: 0,
-      shield_misses: 0,
-    });
-
-    setNewMember("");
-    await normalizePositions();
-    await loadAll();
-  }
-
   async function normalizePositions() {
-    const all = await supabase.from("members").select("*").order("position");
-    const list = all.data || [];
+    const res = await supabase.from("members").select("*").order("position");
+    if (res.error) {
+      setMessage("Fehler Positionen: " + res.error.message);
+      return;
+    }
+
+    const list = res.data || [];
     const active = list.filter((m) => !isBanned(m));
     const banned = list.filter((m) => isBanned(m));
     const ordered = [...active, ...banned];
@@ -121,13 +197,48 @@ export default function App() {
     }
   }
 
+  async function addMember() {
+    const name = newMember.trim();
+    if (!name) {
+      setMessage("Bitte Spielername eingeben.");
+      return;
+    }
+
+    const exists = members.some((m) => m.name.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setMessage("Dieser Spieler ist bereits eingetragen.");
+      return;
+    }
+
+    const activeCount = members.filter((m) => !isBanned(m)).length;
+
+    const res = await supabase.from("members").insert({
+      name,
+      position: activeCount,
+      count: 0,
+      golden: 0,
+      shield_misses: 0,
+      ban_reason: "",
+    });
+
+    if (res.error) {
+      setMessage("Fehler beim Eintragen: " + res.error.message);
+      return;
+    }
+
+    setNewMember("");
+    await normalizePositions();
+    await loadAll();
+    setMessage("Spieler eingetragen.");
+  }
+
   async function nextTurn() {
     const active = members.filter((m) => !isBanned(m));
     if (!active.length) return;
 
     const first = active[0];
 
-    await supabase
+    const res = await supabase
       .from("members")
       .update({
         count: (first.count || 0) + 1,
@@ -135,21 +246,27 @@ export default function App() {
       })
       .eq("id", first.id);
 
+    if (res.error) {
+      setMessage("Fehler beim Zug: " + res.error.message);
+      return;
+    }
+
     await normalizePositions();
     await loadAll();
   }
 
   async function markGolden(member) {
-    await supabase
+    const res = await supabase
       .from("members")
       .update({ golden: (member.golden || 0) + 1 })
       .eq("id", member.id);
 
+    if (res.error) setMessage("Fehler Golden: " + res.error.message);
     await loadAll();
   }
 
   async function banMember(member, reason) {
-    await supabase
+    const res = await supabase
       .from("members")
       .update({
         banned_until: addDays(60),
@@ -158,6 +275,7 @@ export default function App() {
       })
       .eq("id", member.id);
 
+    if (res.error) setMessage("Fehler Sperre: " + res.error.message);
     await normalizePositions();
     await loadAll();
   }
@@ -165,10 +283,7 @@ export default function App() {
   async function unbanMember(member) {
     await supabase
       .from("members")
-      .update({
-        banned_until: null,
-        ban_reason: null,
-      })
+      .update({ banned_until: null, ban_reason: "" })
       .eq("id", member.id);
 
     await normalizePositions();
@@ -209,17 +324,28 @@ export default function App() {
           count: 0,
           golden: 0,
           shield_misses: 0,
+          ban_reason: "",
         })
         .select()
         .single();
 
+      if (res.error) {
+        setMessage("Fehler neuer Spieler: " + res.error.message);
+        return;
+      }
+
       member = res.data;
     }
 
-    await supabase.from("shield_reports").insert({
+    const reportRes = await supabase.from("shield_reports").insert({
       member_name: name,
       date: shieldDate,
     });
+
+    if (reportRes.error) {
+      setMessage("Fehler Schild Report: " + reportRes.error.message);
+      return;
+    }
 
     await supabase
       .from("members")
@@ -231,13 +357,21 @@ export default function App() {
   }
 
   async function addVacation() {
-    if (!vacName.trim() || !vacFrom || !vacUntil) return;
+    if (!vacName.trim() || !vacFrom || !vacUntil) {
+      setMessage("Bitte Name, von und bis eintragen.");
+      return;
+    }
 
-    await supabase.from("vacations").insert({
+    const res = await supabase.from("vacations").insert({
       name: vacName.trim(),
       from_date: vacFrom,
       until_date: vacUntil,
     });
+
+    if (res.error) {
+      setMessage("Fehler Abwesenheit: " + res.error.message);
+      return;
+    }
 
     setVacName("");
     setVacFrom(today());
@@ -260,88 +394,90 @@ export default function App() {
       setAdminLoggedIn(true);
       setLoginPass("");
     } else {
-      alert("Login falsch");
+      setMessage("Login falsch.");
     }
   }
 
-  const next = schedule.find((m) => !isBanned(m));
-
   return (
-    <div style={{ minHeight: "100vh", background: "#050505", color: "#fff", padding: 20, fontFamily: "Arial" }}>
-      <header style={{ display: "flex", gap: 15, alignItems: "center", marginBottom: 20 }}>
-        <div style={{ width: 90, height: 90, borderRadius: 16, background: "#111", border: "2px solid #93c01f", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 42 }}>
-          ☠
-        </div>
-        <div>
-          <h1 style={{ color: "#93c01f", margin: 0 }}>COO Club Zero</h1>
-          <p style={{ color: "#aaa", margin: 0 }}>Zugführer · Schild Report · Abwesenheit</p>
-        </div>
-      </header>
+    <div style={styles.page}>
+      <Header />
 
-      <button onClick={() => setView("member")}>Mitgliederansicht</button>{" "}
-      <button onClick={() => setView("admin")}>Adminbereich</button>
+      <div style={{ marginBottom: 16 }}>
+        <button style={view === "member" ? styles.btn : styles.btnDark} onClick={() => setView("member")}>
+          Mitgliederansicht
+        </button>
+        <button style={view === "admin" ? styles.btn : styles.btnDark} onClick={() => setView("admin")}>
+          Adminbereich
+        </button>
+      </div>
+
+      {message && (
+        <div style={{ ...styles.card, borderColor: "#93c01f", color: "#d9ff9b" }}>
+          {message}
+        </div>
+      )}
 
       {view === "member" && (
-        <>
+        <div style={styles.card}>
           <h2>Mitgliederansicht</h2>
-          <button onClick={() => setMemberTab("zug")}>Zug</button>{" "}
-          <button onClick={() => setMemberTab("schild")}>Schild Report</button>{" "}
-          <button onClick={() => setMemberTab("ferien")}>Abwesenheit</button>
+          <TabButton active={memberTab === "zug"} onClick={() => setMemberTab("zug")}>Zug</TabButton>
+          <TabButton active={memberTab === "schild"} onClick={() => setMemberTab("schild")}>Schild Report</TabButton>
+          <TabButton active={memberTab === "ferien"} onClick={() => setMemberTab("ferien")}>Abwesenheit</TabButton>
 
           {memberTab === "zug" && (
-            <section>
+            <>
               <h3>Zug Warteliste</h3>
-              {next && <h2 style={{ color: "#93c01f" }}>Heute dran: {next.name}</h2>}
-              <input value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
-              <button onClick={addMember}>Eintragen</button>
-              <MemberTable members={schedule} publicView />
-            </section>
+              {next && <Hero text={`Heute dran: ${next.name}`} />}
+              <input style={styles.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
+              <button style={styles.btn} onClick={addMember}>Eintragen</button>
+              <MemberTable members={schedule} />
+            </>
           )}
 
           {memberTab === "schild" && (
-            <section>
+            <>
               <h3>Schild Report</h3>
               <ShieldTable members={shieldList} reports={shieldReports} />
-            </section>
+            </>
           )}
 
           {memberTab === "ferien" && (
-            <section>
+            <>
               <h3>Abwesenheit eintragen</h3>
-              <input value={vacName} onChange={(e) => setVacName(e.target.value)} placeholder="Name" />
-              <input type="date" value={vacFrom} onChange={(e) => setVacFrom(e.target.value)} />
-              <input type="date" value={vacUntil} onChange={(e) => setVacUntil(e.target.value)} />
-              <button onClick={addVacation}>Eintragen</button>
+              <input style={styles.input} value={vacName} onChange={(e) => setVacName(e.target.value)} placeholder="Name" />
+              <input style={styles.input} type="date" value={vacFrom} onChange={(e) => setVacFrom(e.target.value)} />
+              <input style={styles.input} type="date" value={vacUntil} onChange={(e) => setVacUntil(e.target.value)} />
+              <button style={styles.btn} onClick={addVacation}>Eintragen</button>
               <VacationTable vacations={vacations} />
-            </section>
+            </>
           )}
-        </>
+        </div>
       )}
 
       {view === "admin" && !adminLoggedIn && (
-        <section>
+        <div style={styles.card}>
           <h2>Admin Login</h2>
-          <input value={loginUser} onChange={(e) => setLoginUser(e.target.value)} placeholder="Benutzer" />
-          <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Passwort" />
-          <button onClick={login}>Login</button>
-        </section>
+          <input style={styles.input} value={loginUser} onChange={(e) => setLoginUser(e.target.value)} placeholder="Benutzer" />
+          <input style={styles.input} type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Passwort" />
+          <button style={styles.btn} onClick={login}>Login</button>
+        </div>
       )}
 
       {view === "admin" && adminLoggedIn && (
-        <>
+        <div style={styles.card}>
           <h2>Adminbereich</h2>
-          <button onClick={() => setAdminTab("zug")}>Zugführer</button>{" "}
-          <button onClick={() => setAdminTab("schild")}>Schild Report</button>{" "}
-          <button onClick={() => setAdminTab("ferien")}>Abwesenheit</button>{" "}
-          <button onClick={() => setAdminLoggedIn(false)}>Logout</button>
+          <TabButton active={adminTab === "zug"} onClick={() => setAdminTab("zug")}>Zugführer</TabButton>
+          <TabButton active={adminTab === "schild"} onClick={() => setAdminTab("schild")}>Schild Report</TabButton>
+          <TabButton active={adminTab === "ferien"} onClick={() => setAdminTab("ferien")}>Abwesenheit</TabButton>
+          <button style={styles.btnDark} onClick={() => setAdminLoggedIn(false)}>Logout</button>
 
           {adminTab === "zug" && (
-            <section>
+            <>
               <h3>Zugführer</h3>
-              {next && <h2 style={{ color: "#93c01f" }}>Heute dran: {next.name}</h2>}
-              <input value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
-              <button onClick={addMember}>Hinzufügen</button>
-              <button onClick={nextTurn}>Täglichen Zug erledigen</button>
+              {next && <Hero text={`Heute dran: ${next.name}`} />}
+              <input style={styles.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
+              <button style={styles.btn} onClick={addMember}>Hinzufügen</button>
+              <button style={styles.btn} onClick={nextTurn}>Täglichen Zug erledigen</button>
 
               <AdminMemberTable
                 members={schedule}
@@ -352,161 +488,163 @@ export default function App() {
                 onUnban={unbanMember}
                 onDelete={deleteMember}
               />
-            </section>
+            </>
           )}
 
           {adminTab === "schild" && (
-            <section>
+            <>
               <h3>Schild Report</h3>
-              <input value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="Spielername" />
-              <input type="date" value={shieldDate} onChange={(e) => setShieldDate(e.target.value)} />
-              <button onClick={() => addShieldMiss()}>Eintragen</button>
+              <input style={styles.input} value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="Spielername" />
+              <input style={styles.input} type="date" value={shieldDate} onChange={(e) => setShieldDate(e.target.value)} />
+              <button style={styles.btn} onClick={() => addShieldMiss()}>Eintragen</button>
               <ShieldTable members={shieldList} reports={shieldReports} admin onShield={addShieldMiss} onBan={banMember} />
-            </section>
+            </>
           )}
 
           {adminTab === "ferien" && (
-            <section>
+            <>
               <h3>Abwesenheit bearbeiten</h3>
               <VacationTable vacations={vacations} admin onDelete={deleteVacation} onUpdate={updateVacation} />
-            </section>
+            </>
           )}
-        </>
+        </div>
       )}
     </div>
   );
 }
 
+function Header() {
+  return (
+    <header style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 24 }}>
+      <div style={{ width: 94, height: 94, borderRadius: 22, border: "2px solid #93c01f", boxShadow: "0 0 25px rgba(147,192,31,.45)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 42 }}>
+        ☠
+      </div>
+      <div>
+        <h1 style={{ color: "#93c01f", margin: 0, fontSize: 42 }}>COO Club Zero</h1>
+        <p style={{ color: "#aaa", marginTop: 6 }}>Zugführer · Schild Report · Abwesenheit</p>
+      </div>
+    </header>
+  );
+}
+
+function Hero({ text }) {
+  return (
+    <div style={{ background: "#132008", border: "1px solid #93c01f", borderRadius: 16, padding: 16, margin: "14px 0", fontSize: 24, fontWeight: 900, color: "#bfff4d" }}>
+      {text}
+    </div>
+  );
+}
+
+function TabButton({ active, onClick, children }) {
+  return (
+    <button style={active ? styles.btn : styles.btnDark} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
 function MemberTable({ members }) {
   return (
-    <table border="1" cellPadding="8" style={{ marginTop: 15, borderCollapse: "collapse", width: "100%" }}>
-      <thead>
-        <tr>
-          <th>Position</th>
-          <th>Name</th>
-          <th>Termin</th>
-          <th>Status</th>
+    <Table headers={["Position", "Name", "Termin", "Status"]}>
+      {members.map((m, i) => (
+        <tr key={m.id}>
+          <td style={styles.td}>{i + 1}</td>
+          <td style={styles.td}>{m.name}</td>
+          <td style={styles.td}>{m.nextDate}</td>
+          <td style={styles.td}>{m.status}</td>
         </tr>
-      </thead>
-      <tbody>
-        {members.map((m, i) => (
-          <tr key={m.id}>
-            <td>{i + 1}</td>
-            <td>{m.name}</td>
-            <td>{m.nextDate}</td>
-            <td>{m.status}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+      ))}
+    </Table>
   );
 }
 
 function AdminMemberTable({ members, onMove, onGolden, onShield, onBan, onUnban, onDelete }) {
   return (
-    <table border="1" cellPadding="8" style={{ marginTop: 15, borderCollapse: "collapse", width: "100%" }}>
-      <thead>
-        <tr>
-          <th>Pos</th>
-          <th>Name</th>
-          <th>Termin</th>
-          <th>Status</th>
-          <th>Züge</th>
-          <th>Golden</th>
-          <th>Schild</th>
-          <th>Aktionen</th>
+    <Table headers={["Pos", "Name", "Termin", "Status", "Züge", "Golden", "Schild", "Aktionen"]}>
+      {members.map((m, i) => (
+        <tr key={m.id}>
+          <td style={styles.td}>{i + 1}</td>
+          <td style={styles.td}>{m.name}</td>
+          <td style={styles.td}>{m.nextDate}</td>
+          <td style={styles.td}>{m.status}</td>
+          <td style={styles.td}>{m.count || 0}</td>
+          <td style={styles.td}>{m.golden || 0}</td>
+          <td style={styles.td}>{m.shield_misses || 0}</td>
+          <td style={styles.td}>
+            <button onClick={() => onMove(m, -1)}>↑</button>
+            <button onClick={() => onMove(m, 1)}>↓</button>
+            <button onClick={() => onGolden(m)}>Golden</button>
+            <button onClick={() => onShield(m.name)}>Schild</button>
+            <button onClick={() => onBan(m, "Zug nicht erledigt")}>60d</button>
+            {isBanned(m) && <button onClick={() => onUnban(m)}>Entsperren</button>}
+            <button onClick={() => onDelete(m)}>Löschen</button>
+          </td>
         </tr>
-      </thead>
-      <tbody>
-        {members.map((m, i) => (
-          <tr key={m.id}>
-            <td>{i + 1}</td>
-            <td>{m.name}</td>
-            <td>{m.nextDate}</td>
-            <td>{m.status}</td>
-            <td>{m.count || 0}</td>
-            <td>{m.golden || 0}</td>
-            <td>{m.shield_misses || 0}</td>
-            <td>
-              <button onClick={() => onMove(m, -1)}>↑</button>
-              <button onClick={() => onMove(m, 1)}>↓</button>
-              <button onClick={() => onGolden(m)}>Golden</button>
-              <button onClick={() => onShield(m.name)}>Schild vergessen</button>
-              <button onClick={() => onBan(m, "Zug nicht erledigt")}>60d Sperre</button>
-              {isBanned(m) && <button onClick={() => onUnban(m)}>Entsperren</button>}
-              <button onClick={() => onDelete(m)}>Löschen</button>
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+      ))}
+    </Table>
   );
 }
 
 function ShieldTable({ members, reports, admin, onShield, onBan }) {
   return (
-    <table border="1" cellPadding="8" style={{ marginTop: 15, borderCollapse: "collapse", width: "100%" }}>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Anzahl vergessen</th>
-          <th>Letztes Datum</th>
-          <th>Alle Meldungen</th>
-          {admin && <th>Aktionen</th>}
-        </tr>
-      </thead>
-      <tbody>
-        {members.map((m) => {
-          const memberReports = reports.filter((r) => r.member_name === m.name);
-          return (
-            <tr key={m.id}>
-              <td>{m.name}</td>
-              <td>{m.shield_misses || 0}</td>
-              <td>{memberReports[0] ? formatDate(memberReports[0].date) : "-"}</td>
-              <td>{memberReports.map((r) => formatDate(r.date)).join(", ") || "-"}</td>
-              {admin && (
-                <td>
-                  <button onClick={() => onShield(m.name)}>+1</button>
-                  <button onClick={() => onBan(m, "Schild nicht gesetzt")}>60d Sperre</button>
-                </td>
-              )}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <Table headers={admin ? ["Name", "Anzahl", "Letztes Datum", "Alle Meldungen", "Aktionen"] : ["Name", "Anzahl", "Letztes Datum", "Alle Meldungen"]}>
+      {members.map((m) => {
+        const memberReports = reports.filter((r) => r.member_name === m.name);
+        return (
+          <tr key={m.id}>
+            <td style={styles.td}>{m.name}</td>
+            <td style={styles.td}>{m.shield_misses || 0}</td>
+            <td style={styles.td}>{memberReports[0] ? formatDate(memberReports[0].date) : "-"}</td>
+            <td style={styles.td}>{memberReports.map((r) => formatDate(r.date)).join(", ") || "-"}</td>
+            {admin && (
+              <td style={styles.td}>
+                <button onClick={() => onShield(m.name)}>+1</button>
+                <button onClick={() => onBan(m, "Schild nicht gesetzt")}>60d Sperre</button>
+              </td>
+            )}
+          </tr>
+        );
+      })}
+    </Table>
   );
 }
 
 function VacationTable({ vacations, admin, onDelete, onUpdate }) {
   return (
-    <table border="1" cellPadding="8" style={{ marginTop: 15, borderCollapse: "collapse", width: "100%" }}>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Von</th>
-          <th>Bis</th>
-          {admin && <th>Aktionen</th>}
+    <Table headers={admin ? ["Name", "Von", "Bis", "Aktionen"] : ["Name", "Von", "Bis"]}>
+      {vacations.map((v) => (
+        <tr key={v.id}>
+          <td style={styles.td}>{v.name}</td>
+          <td style={styles.td}>
+            {admin ? <input type="date" value={v.from_date} onChange={(e) => onUpdate(v, "from_date", e.target.value)} /> : formatDate(v.from_date)}
+          </td>
+          <td style={styles.td}>
+            {admin ? <input type="date" value={v.until_date} onChange={(e) => onUpdate(v, "until_date", e.target.value)} /> : formatDate(v.until_date)}
+          </td>
+          {admin && (
+            <td style={styles.td}>
+              <button onClick={() => onDelete(v)}>Löschen</button>
+            </td>
+          )}
         </tr>
-      </thead>
-      <tbody>
-        {vacations.map((v) => (
-          <tr key={v.id}>
-            <td>{v.name}</td>
-            <td>
-              {admin ? <input type="date" value={v.from_date} onChange={(e) => onUpdate(v, "from_date", e.target.value)} /> : formatDate(v.from_date)}
-            </td>
-            <td>
-              {admin ? <input type="date" value={v.until_date} onChange={(e) => onUpdate(v, "until_date", e.target.value)} /> : formatDate(v.until_date)}
-            </td>
-            {admin && (
-              <td>
-                <button onClick={() => onDelete(v)}>Löschen</button>
-              </td>
-            )}
+      ))}
+    </Table>
+  );
+}
+
+function Table({ headers, children }) {
+  return (
+    <div style={{ overflowX: "auto", marginTop: 16 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr>
+            {headers.map((h) => (
+              <th key={h} style={styles.th}>{h}</th>
+            ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
   );
 }
