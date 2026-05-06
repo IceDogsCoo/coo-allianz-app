@@ -31,18 +31,18 @@ function isBanned(member) {
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(135deg,#020202,#071306,#000)",
+    background: "radial-gradient(circle at top,#163005,#020202 45%,#000)",
     color: "#fff",
     padding: 24,
     fontFamily: "Arial, sans-serif",
   },
   card: {
-    background: "#0d0d0d",
-    border: "1px solid #23351a",
+    background: "rgba(8,8,8,0.94)",
+    border: "1px solid #263b19",
     borderRadius: 18,
     padding: 18,
     marginTop: 16,
-    boxShadow: "0 0 22px rgba(147,192,31,0.12)",
+    boxShadow: "0 0 28px rgba(147,192,31,0.14)",
   },
   btn: {
     background: "#93c01f",
@@ -56,7 +56,7 @@ const styles = {
     cursor: "pointer",
   },
   btnDark: {
-    background: "#1b1b1b",
+    background: "#151515",
     color: "#fff",
     border: "1px solid #93c01f",
     borderRadius: 10,
@@ -235,7 +235,6 @@ export default function App() {
 
     if (res.error) {
       setMessage("Fehler beim Eintragen: " + res.error.message);
-      console.log(res.error);
       return;
     }
 
@@ -328,25 +327,8 @@ export default function App() {
 
     const other = members[targetIndex];
 
-    const res1 = await supabase
-      .from("members")
-      .update({ position: other.position })
-      .eq("id", member.id);
-
-    if (res1.error) {
-      setMessage("Fehler Verschieben 1: " + res1.error.message);
-      return;
-    }
-
-    const res2 = await supabase
-      .from("members")
-      .update({ position: member.position })
-      .eq("id", other.id);
-
-    if (res2.error) {
-      setMessage("Fehler Verschieben 2: " + res2.error.message);
-      return;
-    }
+    await supabase.from("members").update({ position: other.position }).eq("id", member.id);
+    await supabase.from("members").update({ position: member.position }).eq("id", other.id);
 
     await loadAll();
   }
@@ -375,7 +357,6 @@ export default function App() {
 
       if (res.error) {
         setMessage("Fehler neuer Spieler: " + res.error.message);
-        console.log(res.error);
         return;
       }
 
@@ -473,6 +454,12 @@ export default function App() {
     <div style={styles.page}>
       <Header />
 
+      <div style={{ display: "flex", gap: 16, marginBottom: 20, flexWrap: "wrap" }}>
+        <Stat label="Mitglieder" value={members.length} />
+        <Stat label="Gesperrt" value={members.filter(isBanned).length} />
+        <Stat label="Schild Fehler" value={members.reduce((a, b) => a + (b.shield_misses || 0), 0)} />
+      </div>
+
       <div style={{ marginBottom: 16 }}>
         <button style={view === "member" ? styles.btn : styles.btnDark} onClick={() => setView("member")}>
           Mitgliederansicht
@@ -492,30 +479,17 @@ export default function App() {
         <div style={styles.card}>
           <h2>Mitgliederansicht</h2>
 
-          <TabButton active={memberTab === "zug"} onClick={() => setMemberTab("zug")}>
-            Zug
-          </TabButton>
-          <TabButton active={memberTab === "schild"} onClick={() => setMemberTab("schild")}>
-            Schild Report
-          </TabButton>
-          <TabButton active={memberTab === "ferien"} onClick={() => setMemberTab("ferien")}>
-            Abwesenheit
-          </TabButton>
+          <TabButton active={memberTab === "zug"} onClick={() => setMemberTab("zug")}>Zug</TabButton>
+          <TabButton active={memberTab === "schild"} onClick={() => setMemberTab("schild")}>Schild Report</TabButton>
+          <TabButton active={memberTab === "ferien"} onClick={() => setMemberTab("ferien")}>Abwesenheit</TabButton>
 
           {memberTab === "zug" && (
             <>
               <h3>Zug Warteliste</h3>
               {next && <Hero text={`Heute dran: ${next.name}`} />}
 
-              <input
-                style={styles.input}
-                value={newMember}
-                onChange={(e) => setNewMember(e.target.value)}
-                placeholder="Spielername"
-              />
-              <button style={styles.btn} onClick={addMember}>
-                Eintragen
-              </button>
+              <input style={styles.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
+              <button style={styles.btn} onClick={addMember}>Eintragen</button>
 
               <MemberTable members={schedule} />
             </>
@@ -532,17 +506,10 @@ export default function App() {
             <>
               <h3>Abwesenheit eintragen</h3>
 
-              <input
-                style={styles.input}
-                value={vacName}
-                onChange={(e) => setVacName(e.target.value)}
-                placeholder="Name"
-              />
+              <input style={styles.input} value={vacName} onChange={(e) => setVacName(e.target.value)} placeholder="Name" />
               <input style={styles.input} type="date" value={vacFrom} onChange={(e) => setVacFrom(e.target.value)} />
               <input style={styles.input} type="date" value={vacUntil} onChange={(e) => setVacUntil(e.target.value)} />
-              <button style={styles.btn} onClick={addVacation}>
-                Eintragen
-              </button>
+              <button style={styles.btn} onClick={addVacation}>Eintragen</button>
 
               <VacationTable vacations={vacations} />
             </>
@@ -554,22 +521,9 @@ export default function App() {
         <div style={styles.card}>
           <h2>Admin Login</h2>
 
-          <input
-            style={styles.input}
-            value={loginUser}
-            onChange={(e) => setLoginUser(e.target.value)}
-            placeholder="Benutzer"
-          />
-          <input
-            style={styles.input}
-            type="password"
-            value={loginPass}
-            onChange={(e) => setLoginPass(e.target.value)}
-            placeholder="Passwort"
-          />
-          <button style={styles.btn} onClick={login}>
-            Login
-          </button>
+          <input style={styles.input} value={loginUser} onChange={(e) => setLoginUser(e.target.value)} placeholder="Benutzer" />
+          <input style={styles.input} type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} placeholder="Passwort" />
+          <button style={styles.btn} onClick={login}>Login</button>
         </div>
       )}
 
@@ -577,36 +531,19 @@ export default function App() {
         <div style={styles.card}>
           <h2>Adminbereich</h2>
 
-          <TabButton active={adminTab === "zug"} onClick={() => setAdminTab("zug")}>
-            Zugführer
-          </TabButton>
-          <TabButton active={adminTab === "schild"} onClick={() => setAdminTab("schild")}>
-            Schild Report
-          </TabButton>
-          <TabButton active={adminTab === "ferien"} onClick={() => setAdminTab("ferien")}>
-            Abwesenheit
-          </TabButton>
-          <button style={styles.btnDark} onClick={() => setAdminLoggedIn(false)}>
-            Logout
-          </button>
+          <TabButton active={adminTab === "zug"} onClick={() => setAdminTab("zug")}>Zugführer</TabButton>
+          <TabButton active={adminTab === "schild"} onClick={() => setAdminTab("schild")}>Schild Report</TabButton>
+          <TabButton active={adminTab === "ferien"} onClick={() => setAdminTab("ferien")}>Abwesenheit</TabButton>
+          <button style={styles.btnDark} onClick={() => setAdminLoggedIn(false)}>Logout</button>
 
           {adminTab === "zug" && (
             <>
               <h3>Zugführer</h3>
               {next && <Hero text={`Heute dran: ${next.name}`} />}
 
-              <input
-                style={styles.input}
-                value={newMember}
-                onChange={(e) => setNewMember(e.target.value)}
-                placeholder="Spielername"
-              />
-              <button style={styles.btn} onClick={addMember}>
-                Hinzufügen
-              </button>
-              <button style={styles.btn} onClick={nextTurn}>
-                Täglichen Zug erledigen
-              </button>
+              <input style={styles.input} value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="Spielername" />
+              <button style={styles.btn} onClick={addMember}>Hinzufügen</button>
+              <button style={styles.btn} onClick={nextTurn}>Täglichen Zug erledigen</button>
 
               <AdminMemberTable
                 members={schedule}
@@ -624,21 +561,9 @@ export default function App() {
             <>
               <h3>Schild Report</h3>
 
-              <input
-                style={styles.input}
-                value={shieldName}
-                onChange={(e) => setShieldName(e.target.value)}
-                placeholder="Spielername"
-              />
-              <input
-                style={styles.input}
-                type="date"
-                value={shieldDate}
-                onChange={(e) => setShieldDate(e.target.value)}
-              />
-              <button style={styles.btn} onClick={() => addShieldMiss()}>
-                Eintragen
-              </button>
+              <input style={styles.input} value={shieldName} onChange={(e) => setShieldName(e.target.value)} placeholder="Spielername" />
+              <input style={styles.input} type="date" value={shieldDate} onChange={(e) => setShieldDate(e.target.value)} />
+              <button style={styles.btn} onClick={() => addShieldMiss()}>Eintragen</button>
 
               <ShieldTable members={shieldList} reports={shieldReports} admin onShield={addShieldMiss} onBan={banMember} />
             </>
@@ -656,7 +581,7 @@ export default function App() {
   );
 }
 
-function function Header() {
+function Header() {
   return (
     <header
       style={{
@@ -675,42 +600,15 @@ function function Header() {
         src="/logo.png"
         alt="COO Logo"
         style={{
-          width: 90,
-          height: 90,
+          width: 95,
+          height: 95,
           borderRadius: 16,
           objectFit: "cover",
-          boxShadow: "0 0 25px rgba(147,192,31,0.6)",
+          boxShadow: "0 0 25px rgba(147,192,31,0.65)",
+          border: "1px solid #93c01f",
         }}
       />
 
-      <div>
-        <h1 style={{ color: "#93c01f", margin: 0, fontSize: 42 }}>
-          COO Club Zero
-        </h1>
-        <p style={{ color: "#aaa", marginTop: 6 }}>
-          Zugführer · Schild Report · Abwesenheit
-        </p>
-      </div>
-    </header>
-  );
-}() {
-  return (
-    <header style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 24 }}>
-      <div
-        style={{
-          width: 94,
-          height: 94,
-          borderRadius: 22,
-          border: "2px solid #93c01f",
-          boxShadow: "0 0 25px rgba(147,192,31,.45)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 42,
-        }}
-      >
-        ☠
-      </div>
       <div>
         <h1 style={{ color: "#93c01f", margin: 0, fontSize: 42 }}>COO Club Zero</h1>
         <p style={{ color: "#aaa", marginTop: 6 }}>Zugführer · Schild Report · Abwesenheit</p>
@@ -723,17 +621,38 @@ function Hero({ text }) {
   return (
     <div
       style={{
-        background: "#132008",
-        border: "1px solid #93c01f",
+        background: "linear-gradient(90deg,#1a2d0a,#0b1505)",
+        border: "2px solid #93c01f",
         borderRadius: 16,
-        padding: 16,
-        margin: "14px 0",
-        fontSize: 24,
+        padding: 18,
+        margin: "16px 0",
+        fontSize: 26,
         fontWeight: 900,
-        color: "#bfff4d",
+        color: "#d4ff5e",
+        boxShadow: "0 0 20px rgba(147,192,31,0.4)",
       }}
     >
-      {text}
+      🚆 {text}
+    </div>
+  );
+}
+
+function Stat({ label, value }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        minWidth: 160,
+        background: "#0b0b0b",
+        border: "1px solid #93c01f",
+        borderRadius: 14,
+        padding: 14,
+        textAlign: "center",
+        boxShadow: "0 0 18px rgba(147,192,31,0.16)",
+      }}
+    >
+      <div style={{ fontSize: 26, fontWeight: 900, color: "#93c01f" }}>{value}</div>
+      <div style={{ color: "#aaa", fontSize: 14 }}>{label}</div>
     </div>
   );
 }
@@ -790,13 +709,7 @@ function AdminMemberTable({ members, onMove, onGolden, onShield, onBan, onUnban,
 
 function ShieldTable({ members, reports, admin, onShield, onBan }) {
   return (
-    <Table
-      headers={
-        admin
-          ? ["Name", "Anzahl", "Letztes Datum", "Alle Meldungen", "Aktionen"]
-          : ["Name", "Anzahl", "Letztes Datum", "Alle Meldungen"]
-      }
-    >
+    <Table headers={admin ? ["Name", "Anzahl", "Letztes Datum", "Alle Meldungen", "Aktionen"] : ["Name", "Anzahl", "Letztes Datum", "Alle Meldungen"]}>
       {members.map((m) => {
         const memberReports = reports.filter((r) => r.member_name === m.name);
 
@@ -826,18 +739,10 @@ function VacationTable({ vacations, admin, onDelete, onUpdate }) {
         <tr key={v.id}>
           <td style={styles.td}>{v.name}</td>
           <td style={styles.td}>
-            {admin ? (
-              <input type="date" value={v.from_date} onChange={(e) => onUpdate(v, "from_date", e.target.value)} />
-            ) : (
-              formatDate(v.from_date)
-            )}
+            {admin ? <input type="date" value={v.from_date} onChange={(e) => onUpdate(v, "from_date", e.target.value)} /> : formatDate(v.from_date)}
           </td>
           <td style={styles.td}>
-            {admin ? (
-              <input type="date" value={v.until_date} onChange={(e) => onUpdate(v, "until_date", e.target.value)} />
-            ) : (
-              formatDate(v.until_date)
-            )}
+            {admin ? <input type="date" value={v.until_date} onChange={(e) => onUpdate(v, "until_date", e.target.value)} /> : formatDate(v.until_date)}
           </td>
           {admin && (
             <td style={styles.td}>
@@ -853,11 +758,19 @@ function VacationTable({ vacations, admin, onDelete, onUpdate }) {
 function Table({ headers, children }) {
   return (
     <div style={{ overflowX: "auto", marginTop: 16 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
+      <table
+        style={{
+          width: "100%",
+          borderCollapse: "collapse",
+          background: "#050505",
+          borderRadius: 12,
+          overflow: "hidden",
+        }}
+      >
+        <thead style={{ background: "#111" }}>
           <tr>
             {headers.map((h) => (
-              <th key={h} style={styles.th}>
+              <th key={h} style={{ ...styles.th, fontSize: 14 }}>
                 {h}
               </th>
             ))}
